@@ -1,0 +1,22 @@
+{
+  "name": "meshapp-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MeshApp AI — Doctors Professional Partner (DPP) platform monorepo: Node.js API, React web client, React Native (Expo) mobile client.",
+  "workspaces": [
+    "apps/api",
+    "apps/web",
+    "packages/shared"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev --workspace apps/api",
+    "dev:web": "npm run dev --workspace apps/web",
+    "build:api": "npm run build --workspace apps/api",
+    "build:web": "npm run build --workspace apps/web",
+    "build:shared": "npm run build --workspace packages/shared",
+    "lint": "npm run lint --workspace apps/api && npm run lint --workspace apps/web"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
