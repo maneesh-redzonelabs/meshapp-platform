@@ -1,0 +1,53 @@
+{
+  "expo": {
+    "name": "MeshApp AI",
+    "slug": "meshapp-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#0e0720"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "ai.meshapp.mobile",
+      "infoPlist": {
+        "NSCameraUsageDescription": "MeshApp needs camera access to capture your profile selfie.",
+        "NSPhotoLibraryUsageDescription": "MeshApp needs photo library access to choose a profile selfie.",
+        "NSLocationWhenInUseUsageDescription": "MeshApp uses your location to find your clinic coordinates and nearby doctors."
+      }
+    },
+    "android": {
+      "package": "ai.meshapp.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#0e0720"
+      },
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "MeshApp needs photo library access to choose a profile selfie.",
+          "cameraPermission": "MeshApp needs camera access to capture your profile selfie."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "MeshApp uses your location to find your clinic coordinates and nearby doctors."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "REPLACE_WITH_EAS_PROJECT_ID"
+      }
+    }
+  }
+}

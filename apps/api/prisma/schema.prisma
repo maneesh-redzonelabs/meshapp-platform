@@ -1,0 +1,1564 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["meshapp", "public"]
+}
+
+model admin_actions_log {
+  action_id       String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  admin_id        String          @db.Uuid
+  action_type     String          @db.VarChar(100)
+  target_user_id  String?         @db.Uuid
+  entity_type     String?         @db.VarChar(100)
+  entity_id       String?         @db.Uuid
+  reason          String?
+  notes           String?
+  performed_at    DateTime        @default(now()) @db.Timestamptz(6)
+  users           users?          @relation(fields: [target_user_id], references: [user_id], onUpdate: NoAction)
+  platform_admins platform_admins @relation(fields: [admin_id], references: [admin_id], onUpdate: NoAction, map: "fk_admin_action_admin")
+
+  @@schema("meshapp")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model appointments {
+  appointment_id                                                         String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  patient_id                                                             String                   @db.Uuid
+  family_member_id                                                       String?                  @db.Uuid
+  doctor_id                                                              String                   @db.Uuid
+  location_id                                                            String?                  @db.Uuid
+  appointment_date                                                       DateTime                 @db.Date
+  start_time                                                             DateTime                 @db.Time(6)
+  end_time                                                               DateTime?                @db.Time(6)
+  appointment_type                                                       appointment_type_enum
+  status                                                                 appointment_status_enum  @default(requested)
+  consultation_fee                                                       Decimal                  @db.Decimal(10, 2)
+  platform_service_fee                                                   Decimal                  @default(0) @db.Decimal(10, 2)
+  total_amount                                                           Decimal                  @db.Decimal(10, 2)
+  payment_status                                                         payment_status_enum      @default(pending)
+  payment_id                                                             String?                  @db.Uuid
+  rescheduled_from                                                       String?                  @db.Uuid
+  patient_notes                                                          String?
+  video_session_id                                                       String?                  @db.Uuid
+  cancellation_reason                                                    String?
+  cancelled_by                                                           cancelled_by_enum?
+  created_at                                                             DateTime                 @default(now()) @db.Timestamptz(6)
+  updated_at                                                             DateTime?                @db.Timestamptz(6)
+  doctors                                                                doctors                  @relation(fields: [doctor_id], references: [doctor_id], onUpdate: NoAction)
+  patient_family_members                                                 patient_family_members?  @relation(fields: [family_member_id], references: [family_member_id], onUpdate: NoAction)
+  doctor_clinic_locations                                                doctor_clinic_locations? @relation(fields: [location_id], references: [location_id], onUpdate: NoAction)
+  patients                                                               patients                 @relation(fields: [patient_id], references: [patient_id], onUpdate: NoAction)
+  payments                                                               payments?                @relation(fields: [payment_id], references: [payment_id], onUpdate: NoAction)
+  appointments                                                           appointments?            @relation("appointmentsToappointments", fields: [rescheduled_from], references: [appointment_id], onUpdate: NoAction)
+  other_appointments                                                     appointments[]           @relation("appointmentsToappointments")
+  video_call_sessions_appointments_video_session_idTovideo_call_sessions video_call_sessions?     @relation("appointments_video_session_idTovideo_call_sessions", fields: [video_session_id], references: [session_id], onUpdate: NoAction)
+  prescriptions                                                          prescriptions?
+  video_call_sessions_video_call_sessions_appointment_idToappointments   video_call_sessions?     @relation("video_call_sessions_appointment_idToappointments")
+
+  @@index([appointment_date, status], map: "idx_appt_date_status")
+  @@index([doctor_id, appointment_date, status], map: "idx_appt_doctor_date")
+  @@index([patient_id, status], map: "idx_appt_patient")
+  @@schema("meshapp")
+}
+
+model bot_response_templates {
+  template_id      Int       @id @default(autoincrement())
+  keyword_triggers String[]  @default([])
+  response_text    String
+  category         String?   @db.VarChar(100)
+  priority         Int       @default(0) @db.SmallInt
+  is_active        Boolean   @default(true)
+  created_at       DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime? @db.Timestamptz(6)
+
+  @@index([keyword_triggers], map: "idx_bot_triggers", type: Gin)
+  @@schema("meshapp")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model communities {
+  community_id          String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  community_name        String                  @db.VarChar(255)
+  description           String?
+  speciality_id         Int?                    @db.SmallInt
+  created_by            String                  @db.Uuid
+  member_count          Int                     @default(0)
+  is_public             Boolean                 @default(true)
+  is_active             Boolean                 @default(true)
+  created_at            DateTime                @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime?               @db.Timestamptz(6)
+  users                 users                   @relation(fields: [created_by], references: [user_id], onUpdate: NoAction)
+  medical_specialities  medical_specialities?   @relation(fields: [speciality_id], references: [speciality_id], onUpdate: NoAction)
+  community_memberships community_memberships[]
+  posts                 posts[]
+
+  @@schema("meshapp")
+}
+
+model community_memberships {
+  membership_id String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  community_id  String              @db.Uuid
+  user_id       String              @db.Uuid
+  role          community_role_enum @default(member)
+  joined_at     DateTime            @default(now()) @db.Timestamptz(6)
+  is_active     Boolean             @default(true)
+  communities   communities         @relation(fields: [community_id], references: [community_id], onDelete: Cascade, onUpdate: NoAction)
+  users         users               @relation(fields: [user_id], references: [user_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([community_id, user_id])
+  @@schema("meshapp")
+}
+
+model content_compliance_rules {
+  rule_id    Int                      @id @default(autoincrement())
+  category   String                   @db.VarChar(150)
+  pattern    String
+  severity   compliance_severity_enum @default(block)
+  guidance   String
+  source_ref String?                  @db.VarChar(255)
+  is_active  Boolean                  @default(true)
+  created_at DateTime                 @default(now()) @db.Timestamptz(6)
+  updated_at DateTime?                @db.Timestamptz(6)
+
+  @@schema("meshapp")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model content_compliance_scans {
+  scan_id             String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  entity_type         compliance_entity_type_enum
+  entity_id           String?                     @db.Uuid
+  user_id             String                      @db.Uuid
+  scanned_text        String
+  verdict             compliance_verdict_enum
+  matched_rules       Json?
+  scanned_at          DateTime                    @default(now()) @db.Timestamptz(6)
+  users               users                       @relation(fields: [user_id], references: [user_id], onDelete: Cascade, onUpdate: NoAction)
+  doctor_achievements doctor_achievements[]
+  doctor_publications doctor_publications[]
+  equipment_listings  equipment_listings[]
+  posts               posts[]
+
+  @@index([entity_type, entity_id], map: "idx_compliance_scans_entity")
+  @@index([user_id, scanned_at(sort: Desc)], map: "idx_compliance_scans_user")
+  @@index([verdict, scanned_at(sort: Desc)], map: "idx_compliance_scans_verdict")
+  @@schema("meshapp")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model doctor_achievements {
+  achievement_id           String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  doctor_id                String                   @db.Uuid
+  achievement_text         String
+  achievement_year         Int?                     @db.SmallInt
+  awarding_body            String?                  @db.VarChar(255)
+  compliance_scan_id       String                   @db.Uuid
+  created_at               DateTime                 @default(now()) @db.Timestamptz(6)
+  content_compliance_scans content_compliance_scans @relation(fields: [compliance_scan_id], references: [scan_id], onDelete: NoAction, onUpdate: NoAction)
+  doctors                  doctors                  @relation(fields: [doctor_id], references: [doctor_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([doctor_id], map: "idx_doc_achieve")
+  @@schema("meshapp")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model doctor_affiliations {
+  affiliation_id String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  doctor_id      String    @db.Uuid
+  job_title      String    @db.VarChar(200)
+  hospital_name  String    @db.VarChar(255)
+  from_year      Int       @db.SmallInt
+  to_year        Int?      @db.SmallInt
+  is_current     Boolean   @default(false)
+  created_at     DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime? @db.Timestamptz(6)
+  doctors        doctors   @relation(fields: [doctor_id], references: [doctor_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([doctor_id], map: "idx_doc_affil")
+  @@schema("meshapp")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model doctor_availability_slots {
+  slot_id                 String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  doctor_id               String                   @db.Uuid
+  location_id             String?                  @db.Uuid
+  day_of_week             Int                      @db.SmallInt
+  start_time              DateTime                 @db.Time(6)
+  end_time                DateTime                 @db.Time(6)
+  slot_duration_minutes   Int                      @default(30) @db.SmallInt
+  max_patients            Int                      @default(1) @db.SmallInt
+  slot_type               slot_type_enum           @default(both)
+  is_active               Boolean                  @default(true)
+  created_at              DateTime                 @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime?                @db.Timestamptz(6)
+  doctors                 doctors                  @relation(fields: [doctor_id], references: [doctor_id], onDelete: Cascade, onUpdate: NoAction)
+  doctor_clinic_locations doctor_clinic_locations? @relation(fields: [location_id], references: [location_id], onUpdate: NoAction)
+
+  @@schema("meshapp")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model doctor_blocked_dates {
+  blocked_id    String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  doctor_id     String            @db.Uuid
+  blocked_date  DateTime          @db.Date
+  blocked_type  blocked_type_enum @default(full_day)
+  blocked_start DateTime?         @db.Time(6)
+  blocked_end   DateTime?         @db.Time(6)
+  reason        String?           @db.VarChar(255)
+  created_at    DateTime          @default(now()) @db.Timestamptz(6)
+  doctors       doctors           @relation(fields: [doctor_id], references: [doctor_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([doctor_id, blocked_date], map: "idx_blocked_doc_date")
+  @@schema("meshapp")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model doctor_clinic_locations {
+  location_id               String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  doctor_id                 String                      @db.Uuid
+  clinic_hospital_name      String                      @db.VarChar(255)
+  address_line1             String?                     @db.VarChar(255)
+  address_line2             String?                     @db.VarChar(255)
+  city                      String?                     @db.VarChar(100)
+  state                     String?                     @db.VarChar(100)
+  pin_code                  String?                     @db.VarChar(10)
+  country                   String                      @default("India") @db.VarChar(100)
+  latitude                  Decimal                     @db.Decimal(10, 8)
+  longitude                 Decimal                     @db.Decimal(11, 8)
+  geolocation               Unsupported("geography")
+  consultation_fee_inperson Decimal?                    @db.Decimal(10, 2)
+  consultation_fee_video    Decimal?                    @db.Decimal(10, 2)
+  is_primary                Boolean                     @default(true)
+  is_active                 Boolean                     @default(true)
+  created_at                DateTime                    @default(now()) @db.Timestamptz(6)
+  updated_at                DateTime?                   @db.Timestamptz(6)
+  appointments              appointments[]
+  doctor_availability_slots doctor_availability_slots[]
+  doctors                   doctors                     @relation(fields: [doctor_id], references: [doctor_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([geolocation], map: "idx_clinic_geo", type: Gist)
+  @@index([pin_code], map: "idx_clinic_pin")
+  @@schema("meshapp")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
+model doctor_connections {
+  connection_id                                String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  requester_id                                 String                   @db.Uuid
+  recipient_id                                 String                   @db.Uuid
+  connection_category                          connection_category_enum @default(general)
+  status                                       connection_status_enum   @default(pending)
+  requested_at                                 DateTime                 @default(now()) @db.Timestamptz(6)
+  responded_at                                 DateTime?                @db.Timestamptz(6)
+  is_active                                    Boolean                  @default(true)
+  users_doctor_connections_recipient_idTousers users                    @relation("doctor_connections_recipient_idTousers", fields: [recipient_id], references: [user_id], onDelete: Cascade, onUpdate: NoAction)
+  users_doctor_connections_requester_idTousers users                    @relation("doctor_connections_requester_idTousers", fields: [requester_id], references: [user_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([recipient_id, status], map: "idx_conn_recipient")
+  @@index([requester_id, status], map: "idx_conn_requester")
+  @@schema("meshapp")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model doctor_education {
+  education_id       String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  doctor_id          String               @db.Uuid
+  education_level    education_level_enum
+  degree_name        String               @db.VarChar(100)
+  college_id         Int?
+  college_name_other String?              @db.VarChar(255)
+  passing_year       Int                  @db.SmallInt
+  created_at         DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime?            @db.Timestamptz(6)
+  medical_colleges   medical_colleges?    @relation(fields: [college_id], references: [college_id], onUpdate: NoAction)
+  doctors            doctors              @relation(fields: [doctor_id], references: [doctor_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([college_id], map: "idx_doc_edu_college")
+  @@index([doctor_id], map: "idx_doc_edu_doctor")
+  @@schema("meshapp")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
+model doctor_publications {
+  publication_id           String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  doctor_id                String                   @db.Uuid
+  title                    String
+  journal_name             String?                  @db.VarChar(255)
+  publication_year         Int?                     @db.SmallInt
+  pubmed_id                String?                  @db.VarChar(50)
+  doi                      String?                  @db.VarChar(255)
+  publication_url          String?                  @db.VarChar(500)
+  compliance_scan_id       String                   @db.Uuid
+  created_at               DateTime                 @default(now()) @db.Timestamptz(6)
+  content_compliance_scans content_compliance_scans @relation(fields: [compliance_scan_id], references: [scan_id], onDelete: NoAction, onUpdate: NoAction)
+  doctors                  doctors                  @relation(fields: [doctor_id], references: [doctor_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([doctor_id], map: "idx_doc_pub")
+  @@schema("meshapp")
+}
+
+model doctor_verification_documents {
+  document_id         String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  doctor_id           String                 @db.Uuid
+  document_type       document_type_enum
+  nmc_registration_no String?                @unique @db.VarChar(100)
+  file_path           String                 @db.VarChar(500)
+  file_hash           String?                @db.VarChar(64)
+  review_status       doc_review_status_enum @default(pending)
+  reviewed_by         String?                @db.Uuid
+  reviewed_at         DateTime?              @db.Timestamptz(6)
+  rejection_reason    String?
+  uploaded_at         DateTime               @default(now()) @db.Timestamptz(6)
+  doctors             doctors                @relation(fields: [doctor_id], references: [doctor_id], onDelete: Cascade, onUpdate: NoAction)
+  users               users?                 @relation(fields: [reviewed_by], references: [user_id], onUpdate: NoAction)
+
+  @@index([doctor_id], map: "idx_verif_doc_doctor")
+  @@schema("meshapp")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model doctors {
+  doctor_id                     String                          @id @db.Uuid
+  full_name                     String                          @db.VarChar(200)
+  profile_selfie_url            String?                         @db.VarChar(500)
+  speciality_id                 Int                             @db.SmallInt
+  subspeciality_id              Int                             @db.SmallInt
+  subscription_tier             subscription_tier_enum          @default(free)
+  bio                           String?
+  years_of_experience           Int?                            @db.SmallInt
+  is_searchable                 Boolean                         @default(false)
+  verification_status           verification_status_enum        @default(unverified)
+  rating_avg                    Decimal?                        @db.Decimal(3, 2)
+  rating_count                  Int                             @default(0)
+  profile_completeness_pct      Int                             @default(0) @db.SmallInt
+  backdrop_image_url            String?                         @db.VarChar(500)
+  created_at                    DateTime                        @default(now()) @db.Timestamptz(6)
+  updated_at                    DateTime?                       @db.Timestamptz(6)
+  deleted_at                    DateTime?                       @db.Timestamptz(6)
+  appointments                  appointments[]
+  doctor_achievements           doctor_achievements[]
+  doctor_affiliations           doctor_affiliations[]
+  doctor_availability_slots     doctor_availability_slots[]
+  doctor_blocked_dates          doctor_blocked_dates[]
+  doctor_clinic_locations       doctor_clinic_locations[]
+  doctor_education              doctor_education[]
+  doctor_publications           doctor_publications[]
+  doctor_verification_documents doctor_verification_documents[]
+  users                         users                           @relation(fields: [doctor_id], references: [user_id], onDelete: Cascade, onUpdate: NoAction)
+  medical_specialities          medical_specialities            @relation(fields: [speciality_id], references: [speciality_id], onUpdate: NoAction)
+  medical_subspecialities       medical_subspecialities         @relation(fields: [subspeciality_id], references: [subspeciality_id], onUpdate: NoAction)
+  medico_legal_consultations    medico_legal_consultations[]
+  prescriptions                 prescriptions[]
+
+  @@index([speciality_id, subspeciality_id], map: "idx_doctors_spec")
+  @@index([subscription_tier], map: "idx_doctors_tier")
+  @@index([verification_status], map: "idx_doctors_verif")
+  @@schema("meshapp")
+}
+
+model equipment_categories {
+  category_id                Int                    @id @default(autoincrement()) @db.SmallInt
+  category_name              String                 @unique @db.VarChar(100)
+  parent_category_id         Int?                   @db.SmallInt
+  is_active                  Boolean                @default(true)
+  sort_order                 Int?                   @db.SmallInt
+  equipment_categories       equipment_categories?  @relation("equipment_categoriesToequipment_categories", fields: [parent_category_id], references: [category_id], onUpdate: NoAction)
+  other_equipment_categories equipment_categories[] @relation("equipment_categoriesToequipment_categories")
+  equipment_listings         equipment_listings[]
+
+  @@schema("meshapp")
+}
+
+model equipment_inquiries {
+  inquiry_id         String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  listing_id         String              @db.Uuid
+  buyer_id           String              @db.Uuid
+  message            String
+  status             inquiry_status_enum @default(new)
+  created_at         DateTime            @default(now()) @db.Timestamptz(6)
+  replied_at         DateTime?           @db.Timestamptz(6)
+  users              users               @relation(fields: [buyer_id], references: [user_id], onDelete: Cascade, onUpdate: NoAction)
+  equipment_listings equipment_listings  @relation(fields: [listing_id], references: [listing_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@schema("meshapp")
+}
+
+model equipment_listing_media {
+  media_id           String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  listing_id         String             @db.Uuid
+  file_path          String             @db.VarChar(500)
+  is_primary         Boolean            @default(false)
+  sort_order         Int                @default(0) @db.SmallInt
+  uploaded_at        DateTime           @default(now()) @db.Timestamptz(6)
+  equipment_listings equipment_listings @relation(fields: [listing_id], references: [listing_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@schema("meshapp")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
+model equipment_listings {
+  listing_id               String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  seller_id                String                    @db.Uuid
+  title                    String                    @db.VarChar(255)
+  description              String?
+  category_id              Int?                      @db.SmallInt
+  condition                equipment_condition_enum  @default(good)
+  asking_price             Decimal                   @db.Decimal(12, 2)
+  currency                 String                    @default("INR") @db.VarChar(10)
+  location_city            String?                   @db.VarChar(100)
+  location_state           String?                   @db.VarChar(100)
+  listing_status           listing_status_enum       @default(active)
+  is_negotiable            Boolean                   @default(true)
+  views_count              Int                       @default(0)
+  compliance_scan_id       String                    @db.Uuid
+  created_at               DateTime                  @default(now()) @db.Timestamptz(6)
+  updated_at               DateTime?                 @db.Timestamptz(6)
+  deleted_at               DateTime?                 @db.Timestamptz(6)
+  equipment_inquiries      equipment_inquiries[]
+  equipment_listing_media  equipment_listing_media[]
+  equipment_categories     equipment_categories?     @relation(fields: [category_id], references: [category_id], onUpdate: NoAction)
+  content_compliance_scans content_compliance_scans  @relation(fields: [compliance_scan_id], references: [scan_id], onDelete: NoAction, onUpdate: NoAction)
+  users                    users                     @relation(fields: [seller_id], references: [user_id], onUpdate: NoAction)
+
+  @@index([seller_id, listing_status], map: "idx_listing_seller")
+  @@schema("meshapp")
+}
+
+/// This table is a partition table and requires additional setup for migrations. Visit https://pris.ly/d/partition-tables for more info.
+model failed_login_attempts {
+  attempt_id      BigInt             @default(autoincrement())
+  identifier_hash String             @db.VarChar(255)
+  ip_address      String             @db.VarChar(45)
+  attempt_type    attempt_type_enum?
+  failure_reason  String?            @db.VarChar(255)
+  attempted_at    DateTime           @default(now()) @db.Timestamptz(6)
+
+  @@id([attempt_id, attempted_at])
+  @@index([identifier_hash, attempted_at(sort: Desc)], map: "idx_fail_hash")
+  @@index([ip_address, attempted_at(sort: Desc)], map: "idx_fail_ip")
+  @@schema("meshapp")
+}
+
+model illness_categories {
+  category_id           Int                     @id @default(autoincrement()) @db.SmallInt
+  category_name         String                  @unique @db.VarChar(100)
+  icon_code             String?                 @db.VarChar(50)
+  is_active             Boolean                 @default(true)
+  sort_order            Int?                    @db.SmallInt
+  illness_subcategories illness_subcategories[]
+
+  @@schema("meshapp")
+}
+
+model illness_subcategories {
+  subcategory_id     Int                @id @default(autoincrement()) @db.SmallInt
+  category_id        Int                @db.SmallInt
+  subcategory_name   String             @db.VarChar(150)
+  description        String?
+  is_active          Boolean            @default(true)
+  illness_categories illness_categories @relation(fields: [category_id], references: [category_id], onUpdate: NoAction)
+
+  @@unique([category_id, subcategory_name])
+  @@index([category_id], map: "idx_illness_sub_parent")
+  @@schema("meshapp")
+}
+
+model ip_rate_limits {
+  id            BigInt    @id @default(autoincrement())
+  ip_address    String    @db.VarChar(45)
+  action_type   String    @db.VarChar(100)
+  attempt_count Int       @default(1)
+  window_start  DateTime  @db.Timestamptz(6)
+  is_blocked    Boolean   @default(false)
+  blocked_until DateTime? @db.Timestamptz(6)
+
+  @@index([ip_address, action_type], map: "idx_ratelimit_ip")
+  @@schema("meshapp")
+}
+
+model medical_colleges {
+  college_id             Int                @id @default(autoincrement())
+  college_name           String             @db.VarChar(255)
+  city                   String?            @db.VarChar(100)
+  state                  String?            @db.VarChar(100)
+  country                String             @default("India") @db.VarChar(100)
+  university_affiliation String?            @db.VarChar(255)
+  is_mci_recognized      Boolean            @default(true)
+  is_active              Boolean            @default(true)
+  doctor_education       doctor_education[]
+
+  @@index([college_name(ops: raw("gin_trgm_ops"))], map: "idx_college_name_trgm", type: Gin)
+  @@schema("meshapp")
+}
+
+model medical_representatives {
+  mr_id                    String                    @id @db.Uuid
+  full_name                String                    @db.VarChar(200)
+  company_id               Int?
+  employee_id              String?                   @db.VarChar(100)
+  territory_coverage       String?
+  profile_photo_url        String?                   @db.VarChar(500)
+  is_verified              Boolean                   @default(false)
+  created_at               DateTime                  @default(now()) @db.Timestamptz(6)
+  updated_at               DateTime?                 @db.Timestamptz(6)
+  deleted_at               DateTime?                 @db.Timestamptz(6)
+  pharmaceutical_companies pharmaceutical_companies? @relation(fields: [company_id], references: [company_id], onUpdate: NoAction)
+  users                    users                     @relation(fields: [mr_id], references: [user_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@schema("meshapp")
+}
+
+model medical_specialities {
+  speciality_id           Int                       @id @default(autoincrement()) @db.SmallInt
+  speciality_name         String                    @unique @db.VarChar(100)
+  icon_code               String?                   @db.VarChar(50)
+  is_active               Boolean                   @default(true)
+  sort_order              Int?                      @db.SmallInt
+  communities             communities[]
+  doctors                 doctors[]
+  medical_subspecialities medical_subspecialities[]
+
+  @@schema("meshapp")
+}
+
+model medical_subspecialities {
+  subspeciality_id     Int                  @id @default(autoincrement()) @db.SmallInt
+  speciality_id        Int                  @db.SmallInt
+  subspeciality_name   String               @db.VarChar(150)
+  is_active            Boolean              @default(true)
+  sort_order           Int?                 @db.SmallInt
+  doctors              doctors[]
+  medical_specialities medical_specialities @relation(fields: [speciality_id], references: [speciality_id], onUpdate: NoAction)
+
+  @@unique([speciality_id, subspeciality_name])
+  @@index([speciality_id], map: "idx_subspeciality_parent")
+  @@schema("meshapp")
+}
+
+model medical_suppliers {
+  supplier_id         String              @id @db.Uuid
+  company_name        String              @db.VarChar(255)
+  gst_number          String?             @unique @db.VarChar(20)
+  contact_person_name String?             @db.VarChar(200)
+  business_type       business_type_enum?
+  profile_photo_url   String?             @db.VarChar(500)
+  is_verified         Boolean             @default(false)
+  created_at          DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime?           @db.Timestamptz(6)
+  deleted_at          DateTime?           @db.Timestamptz(6)
+  users               users               @relation(fields: [supplier_id], references: [user_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@schema("meshapp")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model medico_legal_consultations {
+  consultation_id       String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  request_id            String                 @db.Uuid
+  expert_id             String                 @db.Uuid
+  doctor_id             String                 @db.Uuid
+  consultation_type     consultation_type_enum
+  duration_minutes      Int?                   @db.SmallInt
+  is_free_tier          Boolean                @default(false)
+  started_at            DateTime?              @db.Timestamptz(6)
+  ended_at              DateTime?              @db.Timestamptz(6)
+  notes                 String?
+  created_at            DateTime               @default(now()) @db.Timestamptz(6)
+  doctors               doctors                @relation(fields: [doctor_id], references: [doctor_id], onUpdate: NoAction)
+  medico_legal_experts  medico_legal_experts   @relation(fields: [expert_id], references: [expert_id], onUpdate: NoAction)
+  medico_legal_requests medico_legal_requests  @relation(fields: [request_id], references: [request_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([request_id], map: "idx_ml_consultations")
+  @@schema("meshapp")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model medico_legal_experts {
+  expert_id                  String                       @id @db.Uuid
+  full_name                  String                       @db.VarChar(200)
+  bar_council_no             String?                      @unique @db.VarChar(100)
+  specialization             String?                      @db.VarChar(255)
+  years_of_experience        Int?                         @db.SmallInt
+  profile_photo_url          String?                      @db.VarChar(500)
+  free_consult_minutes       Int                          @default(30) @db.SmallInt
+  is_verified                Boolean                      @default(false)
+  is_available               Boolean                      @default(true)
+  created_at                 DateTime                     @default(now()) @db.Timestamptz(6)
+  updated_at                 DateTime?                    @db.Timestamptz(6)
+  deleted_at                 DateTime?                    @db.Timestamptz(6)
+  medico_legal_consultations medico_legal_consultations[]
+  users                      users                        @relation(fields: [expert_id], references: [user_id], onDelete: Cascade, onUpdate: NoAction)
+  medico_legal_requests      medico_legal_requests[]
+
+  @@schema("meshapp")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model medico_legal_requests {
+  request_id                 String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  requester_id               String                       @db.Uuid
+  category                   medico_legal_category_enum   @default(general)
+  subject                    String                       @db.VarChar(500)
+  description                String
+  status                     medico_legal_status_enum     @default(submitted)
+  assigned_expert_id         String?                      @db.Uuid
+  scheduled_call_at          DateTime?                    @db.Timestamptz(6)
+  resolution_notes           String?
+  created_at                 DateTime                     @default(now()) @db.Timestamptz(6)
+  updated_at                 DateTime?                    @db.Timestamptz(6)
+  medico_legal_consultations medico_legal_consultations[]
+  medico_legal_experts       medico_legal_experts?        @relation(fields: [assigned_expert_id], references: [expert_id], onUpdate: NoAction)
+  users                      users                        @relation(fields: [requester_id], references: [user_id], onUpdate: NoAction)
+
+  @@index([requester_id, status], map: "idx_ml_requester")
+  @@schema("meshapp")
+}
+
+model notifications {
+  notification_id   String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  recipient_id      String                 @db.Uuid
+  notification_type notification_type_enum
+  title             String?                @db.VarChar(255)
+  message           String
+  entity_type       String?                @db.VarChar(100)
+  entity_id         String?                @db.Uuid
+  is_read           Boolean                @default(false)
+  read_at           DateTime?              @db.Timestamptz(6)
+  is_sent           Boolean                @default(false)
+  sent_at           DateTime?              @db.Timestamptz(6)
+  created_at        DateTime               @default(now()) @db.Timestamptz(6)
+  users             users                  @relation(fields: [recipient_id], references: [user_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([recipient_id, is_read, created_at(sort: Desc)], map: "idx_notif_inbox")
+  @@schema("meshapp")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model otp_verifications {
+  otp_id        String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id       String?       @db.Uuid
+  otp_type      otp_type_enum
+  recipient     String        @db.VarChar(255)
+  otp_hash      String        @db.VarChar(255)
+  expires_at    DateTime      @db.Timestamptz(6)
+  attempt_count Int           @default(0) @db.SmallInt
+  max_attempts  Int           @default(3) @db.SmallInt
+  is_used       Boolean       @default(false)
+  verified_at   DateTime?     @db.Timestamptz(6)
+  ip_address    String?       @db.VarChar(45)
+  created_at    DateTime      @default(now()) @db.Timestamptz(6)
+  users         users?        @relation(fields: [user_id], references: [user_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([recipient], map: "idx_otp_recipient")
+  @@index([user_id, otp_type], map: "idx_otp_user_type")
+  @@schema("meshapp")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model paramedical_providers {
+  provider_id         String                   @id @db.Uuid
+  full_name           String                   @db.VarChar(200)
+  service_type        paramedical_service_enum
+  service_type_other  String?                  @db.VarChar(100)
+  qualification       String?                  @db.VarChar(255)
+  registration_no     String?                  @db.VarChar(100)
+  years_of_experience Int?                     @db.SmallInt
+  profile_photo_url   String?                  @db.VarChar(500)
+  is_verified         Boolean                  @default(false)
+  created_at          DateTime                 @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime?                @db.Timestamptz(6)
+  deleted_at          DateTime?                @db.Timestamptz(6)
+  users               users                    @relation(fields: [provider_id], references: [user_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@schema("meshapp")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model patient_addresses {
+  address_id  String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  patient_id  String                    @db.Uuid
+  locality    String?                   @db.VarChar(255)
+  city        String?                   @db.VarChar(100)
+  state       String?                   @db.VarChar(100)
+  pin_code    String                    @db.VarChar(10)
+  country     String                    @default("India") @db.VarChar(100)
+  latitude    Decimal?                  @db.Decimal(10, 8)
+  longitude   Decimal?                  @db.Decimal(11, 8)
+  geolocation Unsupported("geography")?
+  is_primary  Boolean                   @default(true)
+  created_at  DateTime                  @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime?                 @db.Timestamptz(6)
+  patients    patients                  @relation(fields: [patient_id], references: [patient_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([patient_id], map: "idx_patient_addr_pid")
+  @@index([pin_code], map: "idx_patient_addr_pin")
+  @@schema("meshapp")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model patient_family_members {
+  family_member_id   String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  patient_id         String            @db.Uuid
+  full_name          String            @db.VarChar(200)
+  date_of_birth      DateTime?         @db.Date
+  age                Int?              @db.SmallInt
+  gender             gender_enum?
+  relationship       relationship_enum
+  relationship_other String?           @db.VarChar(100)
+  is_active          Boolean           @default(true)
+  created_at         DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime?         @db.Timestamptz(6)
+  appointments       appointments[]
+  patients           patients          @relation(fields: [patient_id], references: [patient_id], onDelete: Cascade, onUpdate: NoAction)
+  prescriptions      prescriptions[]
+
+  @@schema("meshapp")
+}
+
+model patients {
+  patient_id             String                   @id @db.Uuid
+  first_name             String                   @db.VarChar(100)
+  last_name              String                   @db.VarChar(100)
+  date_of_birth          DateTime?                @db.Date
+  gender                 gender_enum?
+  blood_group            String?                  @db.VarChar(5)
+  profile_photo_url      String?                  @db.VarChar(500)
+  created_at             DateTime                 @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime?                @db.Timestamptz(6)
+  deleted_at             DateTime?                @db.Timestamptz(6)
+  appointments           appointments[]
+  patient_addresses      patient_addresses[]
+  patient_family_members patient_family_members[]
+  users                  users                    @relation(fields: [patient_id], references: [user_id], onDelete: Cascade, onUpdate: NoAction)
+  prescriptions          prescriptions[]
+
+  @@schema("meshapp")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model payments {
+  payment_id             String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  payer_id               String                      @db.Uuid
+  payment_for            payment_for_enum
+  reference_id           String?                     @db.Uuid
+  amount                 Decimal                     @db.Decimal(12, 2)
+  currency               String                      @default("INR") @db.VarChar(10)
+  payment_method         payment_method_enum?
+  gateway_name           String?                     @db.VarChar(100)
+  gateway_transaction_id String?                     @unique @db.VarChar(255)
+  gateway_order_id       String?                     @db.VarChar(255)
+  status                 payment_gateway_status_enum @default(initiated)
+  failure_reason         String?
+  refund_amount          Decimal                     @default(0) @db.Decimal(12, 2)
+  refunded_at            DateTime?                   @db.Timestamptz(6)
+  initiated_at           DateTime                    @default(now()) @db.Timestamptz(6)
+  completed_at           DateTime?                   @db.Timestamptz(6)
+  appointments           appointments[]
+  users                  users                       @relation(fields: [payer_id], references: [user_id], onUpdate: NoAction)
+  user_subscriptions     user_subscriptions[]
+
+  @@index([payer_id, status], map: "idx_pay_payer_status")
+  @@index([status], map: "idx_pay_status")
+  @@schema("meshapp")
+}
+
+model permissions {
+  permission_id    Int                @id @default(autoincrement())
+  permission_name  String             @unique @db.VarChar(100)
+  resource         String             @db.VarChar(100)
+  action           String             @db.VarChar(50)
+  description      String?
+  role_permissions role_permissions[]
+
+  @@schema("meshapp")
+}
+
+model pharmaceutical_companies {
+  company_id              Int                       @id @default(autoincrement())
+  company_name            String                    @unique @db.VarChar(255)
+  cin_registration_no     String?                   @db.VarChar(50)
+  website                 String?                   @db.VarChar(255)
+  is_verified             Boolean                   @default(false)
+  is_active               Boolean                   @default(true)
+  created_at              DateTime                  @default(now()) @db.Timestamptz(6)
+  medical_representatives medical_representatives[]
+
+  @@schema("meshapp")
+}
+
+model platform_admins {
+  admin_id          String              @id @db.Uuid
+  full_name         String              @db.VarChar(200)
+  admin_role        admin_role_enum
+  department        String?             @db.VarChar(100)
+  employee_id       String?             @unique @db.VarChar(100)
+  requires_2fa      Boolean             @default(true)
+  created_at        DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime?           @db.Timestamptz(6)
+  admin_actions_log admin_actions_log[]
+  users             users               @relation(fields: [admin_id], references: [user_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@schema("meshapp")
+}
+
+model post_comments {
+  comment_id          String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  post_id             String          @db.Uuid
+  author_id           String          @db.Uuid
+  parent_comment_id   String?         @db.Uuid
+  content             String
+  is_active           Boolean         @default(true)
+  created_at          DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime?       @db.Timestamptz(6)
+  deleted_at          DateTime?       @db.Timestamptz(6)
+  users               users           @relation(fields: [author_id], references: [user_id], onUpdate: NoAction)
+  post_comments       post_comments?  @relation("post_commentsTopost_comments", fields: [parent_comment_id], references: [comment_id], onDelete: Cascade, onUpdate: NoAction)
+  other_post_comments post_comments[] @relation("post_commentsTopost_comments")
+  posts               posts           @relation(fields: [post_id], references: [post_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([post_id, created_at(sort: Desc)], map: "idx_post_comments_post")
+  @@schema("meshapp")
+}
+
+model post_likes {
+  like_id    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  post_id    String   @db.Uuid
+  user_id    String   @db.Uuid
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  posts      posts    @relation(fields: [post_id], references: [post_id], onDelete: Cascade, onUpdate: NoAction)
+  users      users    @relation(fields: [user_id], references: [user_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([post_id, user_id])
+  @@index([post_id], map: "idx_post_likes_post")
+  @@schema("meshapp")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model post_media {
+  media_id        String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  post_id         String               @db.Uuid
+  media_type      post_media_type_enum
+  file_path       String               @db.VarChar(500)
+  mime_type       String?              @db.VarChar(100)
+  file_size_bytes Int?
+  thumbnail_path  String?              @db.VarChar(500)
+  sort_order      Int                  @default(0) @db.SmallInt
+  uploaded_at     DateTime             @default(now()) @db.Timestamptz(6)
+  posts           posts                @relation(fields: [post_id], references: [post_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@schema("meshapp")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
+model posts {
+  post_id                  String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  author_id                String                   @db.Uuid
+  content                  String
+  visibility_scope         visibility_scope_enum    @default(public)
+  community_id             String?                  @db.Uuid
+  post_type                post_type_enum           @default(general)
+  likes_count              Int                      @default(0)
+  comments_count           Int                      @default(0)
+  compliance_scan_id       String                   @db.Uuid
+  is_active                Boolean                  @default(true)
+  created_at               DateTime                 @default(now()) @db.Timestamptz(6)
+  updated_at               DateTime?                @db.Timestamptz(6)
+  deleted_at               DateTime?                @db.Timestamptz(6)
+  post_comments            post_comments[]
+  post_likes               post_likes[]
+  post_media               post_media[]
+  users                    users                    @relation(fields: [author_id], references: [user_id], onUpdate: NoAction)
+  communities              communities?             @relation(fields: [community_id], references: [community_id], onUpdate: NoAction)
+  content_compliance_scans content_compliance_scans @relation(fields: [compliance_scan_id], references: [scan_id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@schema("meshapp")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model prescriptions {
+  prescription_id        String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  appointment_id         String                  @unique @db.Uuid
+  doctor_id              String                  @db.Uuid
+  patient_id             String                  @db.Uuid
+  family_member_id       String?                 @db.Uuid
+  diagnosis              String?
+  medications            Json?
+  advice                 String?
+  follow_up_date         DateTime?               @db.Date
+  digital_signature      String?                 @db.VarChar(500)
+  is_active              Boolean                 @default(true)
+  issued_at              DateTime                @default(now()) @db.Timestamptz(6)
+  appointments           appointments            @relation(fields: [appointment_id], references: [appointment_id], onDelete: Cascade, onUpdate: NoAction)
+  doctors                doctors                 @relation(fields: [doctor_id], references: [doctor_id], onUpdate: NoAction)
+  patient_family_members patient_family_members? @relation(fields: [family_member_id], references: [family_member_id], onUpdate: NoAction)
+  patients               patients                @relation(fields: [patient_id], references: [patient_id], onUpdate: NoAction)
+
+  @@schema("meshapp")
+}
+
+model refresh_tokens {
+  token_id     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id      String    @db.Uuid
+  token_hash   String    @unique @db.VarChar(255)
+  device_id    String?   @db.VarChar(255)
+  expires_at   DateTime  @db.Timestamptz(6)
+  is_revoked   Boolean   @default(false)
+  last_used_at DateTime? @db.Timestamptz(6)
+  created_at   DateTime  @default(now()) @db.Timestamptz(6)
+  users        users     @relation(fields: [user_id], references: [user_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@schema("meshapp")
+}
+
+model role_permissions {
+  role_id       Int         @db.SmallInt
+  permission_id Int
+  permissions   permissions @relation(fields: [permission_id], references: [permission_id], onDelete: Cascade, onUpdate: NoAction)
+  roles         roles       @relation(fields: [role_id], references: [role_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([role_id, permission_id])
+  @@schema("meshapp")
+}
+
+model roles {
+  role_id          Int                @id @db.SmallInt
+  role_name        String             @unique @db.VarChar(50)
+  role_description String?
+  is_active        Boolean            @default(true)
+  role_permissions role_permissions[]
+
+  @@schema("meshapp")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model spatial_ref_sys {
+  srid      Int     @id
+  auth_name String? @db.VarChar(256)
+  auth_srid Int?
+  srtext    String? @db.VarChar(2048)
+  proj4text String? @db.VarChar(2048)
+
+  @@schema("meshapp")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model subscription_plans {
+  plan_id            Int                  @id @default(autoincrement())
+  plan_name          String               @unique @db.VarChar(100)
+  user_type          plan_user_type_enum
+  tier               plan_tier_enum
+  price              Decimal              @default(0) @db.Decimal(10, 2)
+  currency           String               @default("INR") @db.VarChar(10)
+  billing_cycle      billing_cycle_enum
+  features           Json?
+  is_active          Boolean              @default(true)
+  created_at         DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime?            @db.Timestamptz(6)
+  user_subscriptions user_subscriptions[]
+
+  @@schema("meshapp")
+}
+
+model support_chat_messages {
+  message_id      String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticket_id       String?                @db.Uuid
+  user_id         String                 @db.Uuid
+  message_type    chat_message_type_enum
+  message_content String
+  is_read         Boolean                @default(false)
+  created_at      DateTime               @default(now()) @db.Timestamptz(6)
+  support_tickets support_tickets?       @relation(fields: [ticket_id], references: [ticket_id], onUpdate: NoAction)
+  users           users                  @relation(fields: [user_id], references: [user_id], onUpdate: NoAction)
+
+  @@index([ticket_id], map: "idx_chat_ticket")
+  @@schema("meshapp")
+}
+
+model support_tickets {
+  ticket_id                                      String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id                                        String                  @db.Uuid
+  subject                                        String                  @db.VarChar(500)
+  description                                    String?
+  status                                         ticket_status_enum      @default(open)
+  priority                                       ticket_priority_enum    @default(medium)
+  assigned_admin_id                              String?                 @db.Uuid
+  resolved_at                                    DateTime?               @db.Timestamptz(6)
+  created_at                                     DateTime                @default(now()) @db.Timestamptz(6)
+  updated_at                                     DateTime?               @db.Timestamptz(6)
+  support_chat_messages                          support_chat_messages[]
+  users_support_tickets_assigned_admin_idTousers users?                  @relation("support_tickets_assigned_admin_idTousers", fields: [assigned_admin_id], references: [user_id], onUpdate: NoAction)
+  users_support_tickets_user_idTousers           users                   @relation("support_tickets_user_idTousers", fields: [user_id], references: [user_id], onUpdate: NoAction)
+
+  @@index([user_id, status], map: "idx_ticket_user_status")
+  @@schema("meshapp")
+}
+
+/// This table is a partition table and requires additional setup for migrations. Visit https://pris.ly/d/partition-tables for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model user_audit_log {
+  log_id      BigInt   @default(autoincrement())
+  user_id     String?  @db.Uuid
+  action      String   @db.VarChar(100)
+  entity_type String?  @db.VarChar(100)
+  entity_id   String?  @db.Uuid
+  old_values  Json?
+  new_values  Json?
+  ip_address  String?  @db.VarChar(45)
+  user_agent  String?
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  users       users?   @relation(fields: [user_id], references: [user_id], onUpdate: NoAction)
+
+  @@id([log_id, created_at])
+  @@index([entity_type, entity_id], map: "idx_audit_entity")
+  @@index([user_id, created_at(sort: Desc)], map: "idx_audit_user_time")
+  @@schema("meshapp")
+}
+
+model user_sessions {
+  session_id         String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id            String                  @db.Uuid
+  session_token_hash String                  @unique @db.VarChar(255)
+  device_type        String?                 @db.VarChar(50)
+  device_fingerprint String?                 @db.VarChar(255)
+  ip_address         String                  @db.VarChar(45)
+  user_agent         String?
+  is_active          Boolean                 @default(true)
+  expires_at         DateTime                @db.Timestamptz(6)
+  last_active_at     DateTime?               @db.Timestamptz(6)
+  revoked_at         DateTime?               @db.Timestamptz(6)
+  revocation_reason  revocation_reason_enum?
+  created_at         DateTime                @default(now()) @db.Timestamptz(6)
+  users              users                   @relation(fields: [user_id], references: [user_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([session_token_hash], map: "idx_session_token")
+  @@schema("meshapp")
+}
+
+model user_subscriptions {
+  subscription_id    String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id            String             @db.Uuid
+  plan_id            Int
+  started_at         DateTime           @db.Timestamptz(6)
+  expires_at         DateTime?          @db.Timestamptz(6)
+  is_active          Boolean            @default(true)
+  auto_renew         Boolean            @default(false)
+  payment_id         String?            @db.Uuid
+  created_at         DateTime           @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime?          @db.Timestamptz(6)
+  payments           payments?          @relation(fields: [payment_id], references: [payment_id], onUpdate: NoAction)
+  subscription_plans subscription_plans @relation(fields: [plan_id], references: [plan_id], onUpdate: NoAction)
+  users              users              @relation(fields: [user_id], references: [user_id], onUpdate: NoAction)
+
+  @@schema("meshapp")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model users {
+  user_id                                                   String                          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  phone_number                                              String                          @unique @db.VarChar(20)
+  email                                                     String?                         @unique @db.VarChar(255)
+  user_type                                                 user_type_enum
+  password_hash                                             String?                         @db.VarChar(255)
+  is_active                                                 Boolean                         @default(true)
+  is_locked                                                 Boolean                         @default(false)
+  locked_until                                              DateTime?                       @db.Timestamptz(6)
+  failed_login_attempts                                     Int                             @default(0) @db.SmallInt
+  last_failed_login_at                                      DateTime?                       @db.Timestamptz(6)
+  last_login_at                                             DateTime?                       @db.Timestamptz(6)
+  last_login_ip                                             String?                         @db.VarChar(45)
+  phone_verified_at                                         DateTime?                       @db.Timestamptz(6)
+  email_verified_at                                         DateTime?                       @db.Timestamptz(6)
+  created_at                                                DateTime                        @default(now()) @db.Timestamptz(6)
+  updated_at                                                DateTime?                       @db.Timestamptz(6)
+  deleted_at                                                DateTime?                       @db.Timestamptz(6)
+  admin_actions_log                                         admin_actions_log[]
+  communities                                               communities[]
+  community_memberships                                     community_memberships[]
+  content_compliance_scans                                  content_compliance_scans[]
+  doctor_connections_doctor_connections_recipient_idTousers doctor_connections[]            @relation("doctor_connections_recipient_idTousers")
+  doctor_connections_doctor_connections_requester_idTousers doctor_connections[]            @relation("doctor_connections_requester_idTousers")
+  doctor_verification_documents                             doctor_verification_documents[]
+  doctors                                                   doctors?
+  equipment_inquiries                                       equipment_inquiries[]
+  equipment_listings                                        equipment_listings[]
+  medical_representatives                                   medical_representatives?
+  medical_suppliers                                         medical_suppliers?
+  medico_legal_experts                                      medico_legal_experts?
+  medico_legal_requests                                     medico_legal_requests[]
+  notifications                                             notifications[]
+  otp_verifications                                         otp_verifications[]
+  paramedical_providers                                     paramedical_providers?
+  patients                                                  patients?
+  payments                                                  payments[]
+  platform_admins                                           platform_admins?
+  post_comments                                             post_comments[]
+  post_likes                                                post_likes[]
+  posts                                                     posts[]
+  refresh_tokens                                            refresh_tokens[]
+  support_chat_messages                                     support_chat_messages[]
+  support_tickets_support_tickets_assigned_admin_idTousers  support_tickets[]               @relation("support_tickets_assigned_admin_idTousers")
+  support_tickets_support_tickets_user_idTousers            support_tickets[]               @relation("support_tickets_user_idTousers")
+  user_audit_log                                            user_audit_log[]
+  user_sessions                                             user_sessions[]
+  user_subscriptions                                        user_subscriptions[]
+
+  @@index([phone_number], map: "idx_users_phone")
+  @@index([user_type], map: "idx_users_type")
+  @@schema("meshapp")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model video_call_sessions {
+  session_id                                                      String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  appointment_id                                                  String?                   @unique(map: "uq_video_appointment") @db.Uuid
+  session_token                                                   String?                   @db.VarChar(500)
+  session_status                                                  video_session_status_enum @default(scheduled)
+  started_at                                                      DateTime?                 @db.Timestamptz(6)
+  ended_at                                                        DateTime?                 @db.Timestamptz(6)
+  duration_seconds                                                Int?
+  doctor_joined_at                                                DateTime?                 @db.Timestamptz(6)
+  patient_joined_at                                               DateTime?                 @db.Timestamptz(6)
+  created_at                                                      DateTime                  @default(now()) @db.Timestamptz(6)
+  appointments_appointments_video_session_idTovideo_call_sessions appointments[]            @relation("appointments_video_session_idTovideo_call_sessions")
+  appointments_video_call_sessions_appointment_idToappointments   appointments?             @relation("video_call_sessions_appointment_idToappointments", fields: [appointment_id], references: [appointment_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_video_session_appointment")
+
+  @@schema("meshapp")
+}
+
+enum admin_role_enum {
+  super_admin
+  verification_admin
+  content_admin
+  support_admin
+
+  @@schema("meshapp")
+}
+
+enum appointment_status_enum {
+  requested
+  confirmed
+  cancelled
+  completed
+  no_show
+  rescheduled
+
+  @@schema("meshapp")
+}
+
+enum appointment_type_enum {
+  in_person
+  video_call
+
+  @@schema("meshapp")
+}
+
+enum attempt_type_enum {
+  otp_mobile
+  otp_email
+  password
+
+  @@schema("meshapp")
+}
+
+enum billing_cycle_enum {
+  monthly
+  quarterly
+  annual
+  one_time
+
+  @@schema("meshapp")
+}
+
+enum blocked_type_enum {
+  full_day
+  partial
+
+  @@schema("meshapp")
+}
+
+enum business_type_enum {
+  manufacturer
+  distributor
+  retailer
+
+  @@schema("meshapp")
+}
+
+enum cancelled_by_enum {
+  patient
+  doctor
+  platform
+
+  @@schema("meshapp")
+}
+
+enum chat_message_type_enum {
+  user
+  bot
+  admin
+
+  @@schema("meshapp")
+}
+
+enum community_role_enum {
+  admin
+  moderator
+  member
+
+  @@schema("meshapp")
+}
+
+enum compliance_entity_type_enum {
+  doctor_achievement
+  doctor_publication
+  post
+  equipment_listing
+
+  @@schema("meshapp")
+}
+
+enum compliance_severity_enum {
+  block
+  warn
+
+  @@schema("meshapp")
+}
+
+enum compliance_verdict_enum {
+  passed
+  blocked
+
+  @@schema("meshapp")
+}
+
+enum connection_category_enum {
+  ug_batch
+  pg_batch
+  super_spec
+  teachers
+  juniors_seniors
+  coworkers
+  team
+  general
+
+  @@schema("meshapp")
+}
+
+enum connection_status_enum {
+  pending
+  accepted
+  rejected
+  blocked
+
+  @@schema("meshapp")
+}
+
+enum consultation_type_enum {
+  phone
+  video
+  written
+
+  @@schema("meshapp")
+}
+
+enum doc_review_status_enum {
+  pending
+  approved
+  rejected
+
+  @@schema("meshapp")
+}
+
+enum document_type_enum {
+  degree_certificate
+  nmc_registration
+  state_registration
+  govt_photo_id
+  other
+
+  @@schema("meshapp")
+}
+
+enum education_level_enum {
+  graduation
+  post_graduation
+  super_speciality
+  fellowship
+  other
+
+  @@schema("meshapp")
+}
+
+enum equipment_condition_enum {
+  new
+  like_new
+  good
+  fair
+
+  @@schema("meshapp")
+}
+
+enum gender_enum {
+  male
+  female
+  other
+  prefer_not_to_say
+
+  @@schema("meshapp")
+}
+
+enum inquiry_status_enum {
+  new
+  replied
+  closed
+
+  @@schema("meshapp")
+}
+
+enum listing_status_enum {
+  active
+  sold
+  cancelled
+  under_review
+
+  @@schema("meshapp")
+}
+
+enum medico_legal_category_enum {
+  malpractice_allegation
+  consent_review
+  notice_reply
+  hospital_compliance
+  general
+
+  @@schema("meshapp")
+}
+
+enum medico_legal_status_enum {
+  submitted
+  assigned
+  in_progress
+  resolved
+  closed
+
+  @@schema("meshapp")
+}
+
+enum notification_type_enum {
+  network
+  post
+  appointment
+  market
+  legal
+  system
+
+  @@schema("meshapp")
+}
+
+enum otp_type_enum {
+  mobile_registration
+  email_registration
+  mobile_login
+  password_reset
+
+  @@schema("meshapp")
+}
+
+enum paramedical_service_enum {
+  nurse
+  physiotherapist
+  lab_technician
+  radiographer
+  dietitian
+  other
+
+  @@schema("meshapp")
+}
+
+enum payment_for_enum {
+  subscription
+  appointment
+  equipment
+  other
+
+  @@schema("meshapp")
+}
+
+enum payment_gateway_status_enum {
+  initiated
+  processing
+  success
+  failed
+  refunded
+  partially_refunded
+
+  @@schema("meshapp")
+}
+
+enum payment_method_enum {
+  credit_card
+  debit_card
+  upi
+  net_banking
+  wallet
+  cash
+
+  @@schema("meshapp")
+}
+
+enum payment_status_enum {
+  pending
+  paid
+  refunded
+  partial
+
+  @@schema("meshapp")
+}
+
+enum plan_tier_enum {
+  free
+  basic
+  premium
+  enterprise
+
+  @@schema("meshapp")
+}
+
+enum plan_user_type_enum {
+  doctor
+  patient
+  mr
+  supplier
+  paramedical
+  medico_legal
+
+  @@schema("meshapp")
+}
+
+enum post_media_type_enum {
+  image
+  video
+  scan
+  document
+
+  @@schema("meshapp")
+}
+
+enum post_type_enum {
+  clinical_case
+  research
+  opinion
+  update
+  general
+
+  @@schema("meshapp")
+}
+
+enum relationship_enum {
+  self
+  spouse
+  son
+  daughter
+  mother
+  father
+  sibling
+  other
+
+  @@schema("meshapp")
+}
+
+enum revocation_reason_enum {
+  logout
+  forced_admin
+  password_change
+  suspicious_activity
+
+  @@schema("meshapp")
+}
+
+enum slot_type_enum {
+  in_person
+  video_call
+  both
+
+  @@schema("meshapp")
+}
+
+enum subscription_tier_enum {
+  free
+  premium
+
+  @@schema("meshapp")
+}
+
+enum ticket_priority_enum {
+  low
+  medium
+  high
+  urgent
+
+  @@schema("meshapp")
+}
+
+enum ticket_status_enum {
+  open
+  in_progress
+  resolved
+  closed
+
+  @@schema("meshapp")
+}
+
+enum user_type_enum {
+  doctor
+  patient
+  mr
+  paramedical
+  medico_legal
+  supplier
+  admin
+
+  @@schema("meshapp")
+}
+
+enum verification_status_enum {
+  unverified
+  pending
+  verified
+  rejected
+
+  @@schema("meshapp")
+}
+
+enum video_session_status_enum {
+  scheduled
+  active
+  ended
+  failed
+
+  @@schema("meshapp")
+}
+
+enum visibility_scope_enum {
+  public
+  network_only
+  community_only
+  private
+
+  @@schema("meshapp")
+}

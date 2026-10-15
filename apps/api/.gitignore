@@ -1,0 +1,3 @@
+# Runtime-generated local file storage (dev substitute for S3) — never commit uploaded content.
+uploads/*
+!uploads/.gitkeep
